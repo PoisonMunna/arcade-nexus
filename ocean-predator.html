@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ocean Predator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Pirata+One&family=Exo+2:wght@400;700;900&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:radial-gradient(circle at 50% 20%,#001a33 0%,#000d1a 60%,#000 100%);
+    display:flex;flex-direction:column;align-items:center;min-height:100vh;font-family:'Exo 2',sans-serif;overflow-x:hidden;}
+  #gc{position:relative;margin:20px auto;border-radius:8px;
+    box-shadow:0 0 50px rgba(0,150,255,0.4),0 0 100px rgba(0,80,200,0.2);
+    border:2px solid rgba(0,180,255,0.3);}
+  canvas{display:block;border-radius:8px;cursor:crosshair;}
+  .hud{position:absolute;top:15px;left:15px;color:#00ccff;font-size:13px;z-index:10;pointer-events:none;}
+  .hud div{margin-bottom:6px;padding:6px 14px;background:rgba(0,10,30,0.9);border:1px solid rgba(0,180,255,0.25);border-radius:20px;text-shadow:0 0 8px #00aaff;}
+  #ls{position:absolute;top:0;left:0;width:100%;height:100%;
+    background:linear-gradient(180deg,#000d1a 0%,#001a33 50%,#000d1a 100%);
+    display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:100;border-radius:8px;}
+  .gt{font-family:'Pirata One',cursive;font-size:clamp(2.5rem,8vw,5rem);color:#00aaff;
+    text-shadow:0 0 30px #0066ff,0 0 60px #003399;margin-bottom:5px;letter-spacing:4px;text-align:center;}
+  .gsub{color:#4488ff;font-size:0.9rem;margin-bottom:2rem;letter-spacing:3px;opacity:0.8;}
+  .bw{width:min(300px,70%);height:8px;background:rgba(0,150,255,0.15);border-radius:20px;margin-bottom:1.5rem;overflow:hidden;}
+  .bf{height:100%;background:linear-gradient(90deg,#0044ff,#00aaff);width:0%;transition:width 0.3s;box-shadow:0 0 12px #0066ff;}
+  #lt{color:rgba(0,180,255,0.6);font-size:0.8rem;margin-bottom:2rem;}
+  .btn{padding:14px 45px;border:2px solid #00aaff;background:rgba(0,100,255,0.1);font-family:'Exo 2',sans-serif;
+    font-size:1.1rem;font-weight:700;cursor:pointer;transition:all 0.3s;opacity:0;transform:translateY(20px);
+    color:#00aaff;letter-spacing:3px;box-shadow:0 0 20px rgba(0,150,255,0.3);border-radius:30px;}
+  .btn.show{opacity:1;transform:translateY(0);}
+  .btn:hover{background:rgba(0,150,255,0.2);box-shadow:0 0 30px rgba(0,180,255,0.7);transform:translateY(-3px);}
+  .ov{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:rgba(0,5,20,0.97);border:2px solid rgba(0,150,255,0.4);
+    border-radius:12px;padding:35px;text-align:center;color:#00aaff;
+    display:none;z-index:20;width:min(420px,90%);backdrop-filter:blur(20px);}
+  .ov h2{font-family:'Pirata One',cursive;font-size:2.5rem;margin-bottom:15px;text-shadow:0 0 20px #0066ff;}
+  .ov p{margin:8px 0;font-size:1rem;}
+  .ov .hint{margin-top:20px;opacity:0.5;font-size:0.85rem;}
+  .ci{position:absolute;bottom:15px;left:15px;color:rgba(0,180,255,0.4);font-size:11px;
+    z-index:10;background:rgba(0,0,0,0.5);padding:6px 10px;border-radius:15px;pointer-events:none;}
+</style>
+</head>
+<body>
+<div id="gc">
+  <div id="ls">
+    <div class="gt">🦈 OCEAN<br>PREDATOR</div>
+    <div class="gsub">RULE THE DEEP</div>
+    <div class="bw"><div class="bf" id="lb"></div></div>
+    <div id="lt">Diving to the abyss...</div>
+    <button class="btn" id="sb">DIVE IN</button>
+  </div>
+  <canvas id="c"></canvas>
+  <div class="hud" id="hud" style="display:none">
+    <div>❤ VITALITY: <span id="hp">100</span>%</div>
+    <div>🌊 DEPTH: <span id="wn">1</span></div>
+    <div>🎯 PREY: <span id="kl">0</span></div>
+    <div>💎 SCORE: <span id="sc">0</span></div>
+  </div>
+  <div class="ci">WASD: Swim | Mouse: Aim | Click: Bite Attack</div>
+  <div class="ov" id="ov">
+    <h2 id="ot">SHARK DOWN</h2>
+    <p id="o1"></p><p id="o2"></p><p id="o3"></p><p id="o4"></p>
+    <div class="hint">Click to resurface</div>
+  </div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=900,H=620; canvas.width=W; canvas.height=H;
+document.getElementById('gc').style.width=W+'px';
+
+let gs='loading',score=0,wave=1,kills=0,combo=0,maxCombo=0;
+let player,torpedoes=[],enemies=[],particles=[],powerUps=[];
+let bubbles=[],seaFloor=[],kelp=[];
+const keys={},mouse={x:W/2,y:H/2,pressed:false};
+let waveT=0;
+
+// Generate seafloor
+function initOcean(){
+  bubbles.length=0; seaFloor.length=0; kelp.length=0;
+  for(let i=0;i<60;i++) bubbles.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*4+1,speed:Math.random()*0.8+0.2,alpha:Math.random()*0.4+0.1});
+  for(let x=0;x<=W;x+=20) seaFloor.push({x,y:H-20+Math.sin(x*0.05)*15+Math.random()*10});
+  for(let i=0;i<15;i++) kelp.push({x:Math.random()*W,h:Math.random()*80+40,t:Math.random()*Math.PI*2,segments:6});
+}
+
+function drawOcean(){
+  waveT+=0.002;
+  // Deep sea gradient
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#001a40'); g.addColorStop(0.4,'#001030'); g.addColorStop(0.8,'#000820'); g.addColorStop(1,'#000510');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // Light rays from surface
+  ctx.save(); ctx.globalAlpha=0.04;
+  for(let i=0;i<8;i++){
+    const rx=W*0.2+i*(W*0.08);
+    const rg=ctx.createLinearGradient(rx,0,rx+60,H);
+    rg.addColorStop(0,'#88ccff'); rg.addColorStop(1,'transparent');
+    ctx.fillStyle=rg;
+    ctx.beginPath(); ctx.moveTo(rx+Math.sin(waveT+i)*20,0); ctx.lineTo(rx+80+Math.sin(waveT+i*0.5)*20,H); ctx.lineTo(rx+60+Math.sin(waveT+i*0.5)*20,H); ctx.lineTo(rx+Math.sin(waveT+i)*20-20,0); ctx.closePath(); ctx.fill();
+  } ctx.restore();
+  // Bubbles
+  bubbles.forEach(b=>{
+    b.y-=b.speed; if(b.y<-10){b.y=H+10;b.x=Math.random()*W;}
+    ctx.save(); ctx.globalAlpha=b.alpha; ctx.strokeStyle='rgba(100,200,255,0.6)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.stroke(); ctx.restore();
+  });
+  // Kelp
+  kelp.forEach(k=>{
+    k.t+=0.02;
+    ctx.save(); ctx.strokeStyle='rgba(0,150,50,0.7)'; ctx.lineWidth=3;
+    let kx=k.x, ky=H-30;
+    ctx.beginPath(); ctx.moveTo(kx,ky);
+    for(let s=0;s<k.segments;s++){
+      const sy=ky-k.h/k.segments*(s+1);
+      const sx=kx+Math.sin(k.t+s*0.5)*15;
+      ctx.lineTo(sx,sy);
+    } ctx.stroke(); ctx.restore();
+  });
+  // Sea floor
+  ctx.fillStyle='#001a0a'; ctx.beginPath(); ctx.moveTo(0,H);
+  seaFloor.forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.lineTo(W,H); ctx.closePath(); ctx.fill();
+  // Sand texture
+  ctx.fillStyle='#002a10';
+  seaFloor.forEach((p,i)=>{ if(i%4===0){ ctx.beginPath(); ctx.arc(p.x,p.y+5,Math.random()*3+2,0,Math.PI*2); ctx.fill(); } });
+}
+
+class Particle{
+  constructor(x,y,col,type){this.x=x;this.y=y;this.color=col;
+    this.vx=(Math.random()-0.5)*8;this.vy=(Math.random()-0.5)*8;
+    this.life=type==='blood'?40:20;this.maxLife=this.life;this.size=Math.random()*5+2;}
+  update(){this.x+=this.vx;this.y+=this.vy;this.vx*=0.94;this.vy*=0.94;this.life--;}
+  draw(){ctx.save();ctx.globalAlpha=this.life/this.maxLife;ctx.fillStyle=this.color;ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);ctx.fill();ctx.restore();}
+}
+
+class Shark{
+  constructor(){this.x=W*0.3;this.y=H*0.4;this.r=22;this.speed=230;this.hp=100;this.maxHp=100;this.angle=0;this.tailT=0;this.invT=0;this.biteT=0;this.biting=false;}
+  update(dt){
+    let dx=0,dy=0;
+    if(keys['KeyW']||keys['ArrowUp'])dy-=1;if(keys['KeyS']||keys['ArrowDown'])dy+=1;
+    if(keys['KeyA']||keys['ArrowLeft'])dx-=1;if(keys['KeyD']||keys['ArrowRight'])dx+=1;
+    if(dx&&dy){dx*=0.707;dy*=0.707;}
+    this.x=Math.max(this.r,Math.min(W-this.r,this.x+dx*this.speed*(dt/1000)));
+    this.y=Math.max(this.r,Math.min(H-this.r,this.y+dy*this.speed*(dt/1000)));
+    this.angle=Math.atan2(mouse.y-this.y,mouse.x-this.x);
+    this.tailT+=dt*0.008; if(this.invT>0)this.invT-=dt;
+    if(this.biteT>0){this.biteT-=dt; this.biting=this.biteT>0;}
+    if(mouse.pressed&&this.biteT<=0) this.bite();
+  }
+  bite(){
+    this.biteT=300; this.biting=true;
+    const biteRange=60;
+    const bx=this.x+Math.cos(this.angle)*biteRange, by=this.y+Math.sin(this.angle)*biteRange;
+    torpedoes.push({x:bx,y:by,vx:Math.cos(this.angle)*500,vy:Math.sin(this.angle)*500,r:12,dmg:35,born:Date.now(),owner:'player'});
+    for(let i=0;i<5;i++) particles.push(new Particle(bx,by,'rgba(200,230,255,0.6)','bubble'));
+  }
+  takeDmg(d){
+    if(this.invT>0)return; this.hp-=d; this.invT=800; combo=0;
+    for(let i=0;i<10;i++) particles.push(new Particle(this.x,this.y,'#cc2200','blood'));
+    if(this.hp<=0){this.hp=0;endGame();}
+    canvas.style.filter='sepia(1) hue-rotate(300deg)'; setTimeout(()=>canvas.style.filter='',150);
+  }
+  draw(){
+    if(this.invT>0&&Math.floor(this.invT/100)%2===0)return;
+    ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle);
+    const tailWave=Math.sin(this.tailT)*10;
+    // Tail fin
+    ctx.fillStyle='#4488aa';
+    ctx.beginPath(); ctx.moveTo(-22,0); ctx.lineTo(-38,-12+tailWave); ctx.lineTo(-30,0); ctx.lineTo(-38,12+tailWave); ctx.closePath(); ctx.fill();
+    // Body
+    const bg=ctx.createLinearGradient(0,-10,0,10);
+    bg.addColorStop(0,'#5599bb'); bg.addColorStop(0.5,'#3377aa'); bg.addColorStop(1,'#1a4466');
+    ctx.fillStyle=bg;
+    ctx.beginPath(); ctx.moveTo(30,0); ctx.lineTo(15,-10); ctx.lineTo(-20,-8); ctx.lineTo(-25,0); ctx.lineTo(-20,8); ctx.lineTo(15,10); ctx.closePath(); ctx.fill();
+    // Belly (white)
+    ctx.fillStyle='#aaccdd';
+    ctx.beginPath(); ctx.moveTo(25,0); ctx.lineTo(10,-5); ctx.lineTo(-18,-4); ctx.lineTo(-22,0); ctx.lineTo(-18,4); ctx.lineTo(10,5); ctx.closePath(); ctx.fill();
+    // Dorsal fin
+    ctx.fillStyle='#2a6688';
+    ctx.beginPath(); ctx.moveTo(5,-8); ctx.lineTo(0,-22); ctx.lineTo(-10,-8); ctx.closePath(); ctx.fill();
+    // Pectoral fins
+    ctx.fillStyle='#3a7799';
+    ctx.beginPath(); ctx.moveTo(10,8); ctx.lineTo(0,22); ctx.lineTo(-8,8); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(10,-8); ctx.lineTo(0,-22); ctx.lineTo(-8,-8); ctx.closePath(); ctx.fill();
+    // Eye
+    ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(20,-3,4,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(21,-4,1.5,0,Math.PI*2); ctx.fill();
+    // Mouth (open when biting)
+    if(this.biting){
+      ctx.fillStyle='#cc0000'; ctx.beginPath();
+      ctx.moveTo(30,0); ctx.lineTo(22,-6); ctx.lineTo(22,6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#ffffff';
+      for(let t=-4;t<=4;t+=2){ ctx.beginPath(); ctx.moveTo(28,t); ctx.lineTo(25,t-2); ctx.lineTo(25,t+2); ctx.closePath(); ctx.fill(); }
+    }else{
+      ctx.strokeStyle='#1a4466'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(30,2); ctx.lineTo(22,2); ctx.stroke();
+    }
+    ctx.restore();
+    // HP bar
+    const bw=50;
+    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(this.x-bw/2,this.y-this.r-12,bw,5);
+    ctx.fillStyle=this.hp/this.maxHp>0.5?'#00cc88':'#ff4400';
+    ctx.fillRect(this.x-bw/2,this.y-this.r-12,bw*(this.hp/this.maxHp),5);
+  }
+}
+
+class Enemy{
+  constructor(x,y,type='sub'){
+    this.x=x;this.y=y;this.type=type;
+    this.r=type==='carrier'?32:type==='diver'?14:20;
+    this.speed=type==='carrier'?35:type==='diver'?120:75+wave*4;
+    this.hp=type==='carrier'?200+wave*30:type==='diver'?50+wave*8:80+wave*12;
+    this.maxHp=this.hp;this.angle=0;this.tTimer=0;
+    this.tInt=type==='carrier'?700:type==='diver'?0:1200+Math.random()*800;
+    this.lastAtk=0;this.bobT=Math.random()*Math.PI*2;
+  }
+  update(dt){
+    const dx=player.x-this.x,dy=player.y-this.y;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    this.angle=Math.atan2(dy,dx); this.bobT+=dt*0.002;
+    const keepDist=this.type==='carrier'?180:this.type==='diver'?50:70;
+    if(dist>keepDist){this.x+=dx/dist*this.speed*(dt/1000);this.y+=dy/dist*this.speed*(dt/1000);}
+    if(this.type==='diver') this.y+=Math.sin(this.bobT*2)*0.5;
+    this.x=Math.max(this.r,Math.min(W-this.r,this.x));
+    this.y=Math.max(this.r,Math.min(H-this.r,this.y));
+    if(this.type!=='diver'){
+      this.tTimer+=dt;
+      if(this.tTimer>this.tInt&&dist<500){this.fire();this.tTimer=0;}
+    }
+    if(dist<this.r+player.r){
+      const now=Date.now(); if(now-this.lastAtk>1200){player.takeDmg(this.type==='carrier'?18:this.type==='diver'?12:14);this.lastAtk=now;}
+    }
+  }
+  fire(){
+    const a=this.angle+(Math.random()-0.5)*0.2;
+    const spd=this.type==='carrier'?420:300;
+    if(this.type==='carrier'){
+      [-0.2,0,0.2].forEach(off=>{
+        torpedoes.push({x:this.x,y:this.y,vx:Math.cos(this.angle+off)*spd,vy:Math.sin(this.angle+off)*spd,r:8,dmg:16,born:Date.now(),owner:'enemy',color:'#ff8800'});
+      });
+    }else{
+      torpedoes.push({x:this.x,y:this.y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,r:6,dmg:14,born:Date.now(),owner:'enemy',color:'#ffaa22'});
+    }
+    for(let i=0;i<6;i++) particles.push(new Particle(this.x,this.y,'rgba(200,150,50,0.7)','bubble'));
+  }
+  takeDmg(d){
+    this.hp-=d;
+    for(let i=0;i<6;i++) particles.push(new Particle(this.x,this.y,'rgba(100,180,255,0.8)','bubble'));
+    if(this.hp<=0)this.die();
+  }
+  die(){
+    const pts=this.type==='carrier'?500:this.type==='diver'?200:100;
+    score+=Math.floor(pts*wave*(1+combo*0.08)); kills++; combo++; maxCombo=Math.max(maxCombo,combo);
+    if(Math.random()<(this.type==='carrier'?0.8:0.25)) powerUps.push(new PowerUp(this.x,this.y));
+    for(let i=0;i<(this.type==='carrier'?25:12);i++) particles.push(new Particle(this.x,this.y,'rgba(100,200,255,0.8)','bubble'));
+    enemies.splice(enemies.indexOf(this),1);
+    if(enemies.length===0)setTimeout(nextWave,2500);
+  }
+  draw(){
+    ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle);
+    if(this.type==='sub'){
+      // Submarine
+      ctx.fillStyle='#3a5a1a'; ctx.beginPath();
+      ctx.ellipse(0,0,this.r,this.r*0.55,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#2a4a10'; ctx.fillRect(-5,-this.r*0.55-8,10,8);
+      ctx.fillStyle='#ff4400'; ctx.beginPath(); ctx.arc(this.r-5,0,4,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#4a7a1a'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(0,0,this.r,this.r*0.55,0,0,Math.PI*2); ctx.stroke();
+    }else if(this.type==='carrier'){
+      // Carrier sub - big
+      ctx.fillStyle='#1a3a0a';
+      ctx.beginPath(); ctx.ellipse(0,0,this.r,this.r*0.5,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#2a5a1a'; ctx.fillRect(-5,-this.r*0.5-12,12,12);
+      ctx.fillRect(-15,-this.r*0.5-8,8,8);
+      ctx.fillStyle='#ff6600'; ctx.fillRect(this.r*0.5,-4,this.r*0.7,8);
+      ctx.fillRect(-this.r-5,-4,this.r*0.4,8);
+      ctx.strokeStyle='#44aa22'; ctx.lineWidth=3; ctx.beginPath(); ctx.ellipse(0,0,this.r,this.r*0.5,0,0,Math.PI*2); ctx.stroke();
+    }else{
+      // Diver
+      ctx.fillStyle='#334455'; ctx.beginPath(); ctx.arc(0,0,this.r,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#445566'; ctx.beginPath(); ctx.arc(-2,0,9,0,Math.PI*2); ctx.fill();
+      // Flippers
+      ctx.fillStyle='#1a3a4a';
+      ctx.beginPath(); ctx.ellipse(-this.r+2,4,8,3,0.3,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-this.r+2,-4,8,3,-0.3,0,Math.PI*2); ctx.fill();
+      // Harpoon
+      ctx.fillStyle='#aaaaaa'; ctx.fillRect(this.r-5,-1.5,14,3);
+      ctx.fillStyle='#ffcc00'; ctx.fillRect(this.r+7,-3,6,6);
+    }
+    ctx.restore();
+    // HP bar
+    const bw=this.r*2.5; const by=this.y-this.r-12;
+    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(this.x-bw/2,by,bw,4);
+    ctx.fillStyle=this.hp/this.maxHp>0.5?'#00ccff':'#ff4400'; ctx.fillRect(this.x-bw/2,by,bw*(this.hp/this.maxHp),4);
+    if(this.type==='carrier'){ ctx.fillStyle='#ffcc00'; ctx.font='bold 10px Exo 2'; ctx.textAlign='center'; ctx.fillText('CARRIER',this.x,by-6); }
+  }
+}
+
+class PowerUp{
+  constructor(x,y){this.x=x;this.y=y;this.r=14;this.t=0;
+    const r=Math.random(); this.type=r<0.4?'health':r<0.7?'speed':'rage';
+    this.color=this.type==='health'?'#ff4455':this.type==='speed'?'#00aaff':'#ff8800';}
+  update(dt){this.t+=dt;this.y+=Math.sin(this.t*0.002)*0.3;if(this.t>8000)powerUps.splice(powerUps.indexOf(this),1);}
+  draw(){
+    const p=1+Math.sin(this.t/200)*0.2;
+    ctx.save(); ctx.shadowBlur=15; ctx.shadowColor=this.color;
+    ctx.fillStyle=this.color; ctx.beginPath(); ctx.arc(this.x,this.y,this.r*p,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font='bold 13px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(this.type==='health'?'♥':this.type==='speed'?'⚡':'🦈',this.x,this.y);
+    ctx.restore();
+  }
+}
+
+function spawnWave(){
+  const count=4+Math.floor(wave*1.3);
+  for(let i=0;i<count;i++){
+    const side=Math.floor(Math.random()*4); let x,y;
+    if(side===0){x=Math.random()*W;y=-30;} else if(side===1){x=W+30;y=Math.random()*H;}
+    else if(side===2){x=Math.random()*W;y=H+30;} else{x=-30;y=Math.random()*H;}
+    const r=Math.random();
+    const type=wave>=4&&r<0.15?'carrier':wave>=2&&r<0.35?'diver':'sub';
+    enemies.push(new Enemy(x,y,type));
+  }
+}
+function nextWave(){wave++;setTimeout(spawnWave,500);}
+function endGame(){
+  gs='gameOver'; document.getElementById('ov').style.display='block';
+  document.getElementById('ot').textContent='🦈 SHARK DOWN';
+  document.getElementById('o1').textContent='Score: '+Math.floor(score);
+  document.getElementById('o2').textContent='Prey Devoured: '+kills;
+  document.getElementById('o3').textContent='Depths Reached: '+wave;
+  document.getElementById('o4').textContent='Feeding Frenzy: '+maxCombo+'x';
+}
+function updateHUD(){
+  document.getElementById('hp').textContent=Math.floor(player.hp);
+  document.getElementById('wn').textContent=wave;
+  document.getElementById('kl').textContent=kills;
+  document.getElementById('sc').textContent=Math.floor(score);
+}
+function checkCollisions(){
+  for(let i=torpedoes.length-1;i>=0;i--){
+    const t=torpedoes[i];
+    if(t.owner==='player'){
+      for(let j=enemies.length-1;j>=0;j--){
+        const e=enemies[j]; const dx=t.x-e.x,dy=t.y-e.y;
+        if(Math.sqrt(dx*dx+dy*dy)<t.r+e.r){e.takeDmg(t.dmg);torpedoes.splice(i,1);break;}
+      }
+    }else{
+      const dx=t.x-player.x,dy=t.y-player.y;
+      if(Math.sqrt(dx*dx+dy*dy)<t.r+player.r){player.takeDmg(t.dmg);torpedoes.splice(i,1);}
+    }
+  }
+  for(let i=powerUps.length-1;i>=0;i--){
+    const p=powerUps[i]; const dx=player.x-p.x,dy=player.y-p.y;
+    if(Math.sqrt(dx*dx+dy*dy)<player.r+p.r){
+      if(p.type==='health') player.hp=Math.min(player.maxHp,player.hp+40);
+      else if(p.type==='speed'){player.speed=340; setTimeout(()=>player.speed=230,5000);}
+      else{player.r=28; setTimeout(()=>player.r=22,6000);}
+      for(let j=0;j<15;j++) particles.push(new Particle(p.x,p.y,p.color,'bubble'));
+      powerUps.splice(i,1);
+    }
+  }
+}
+
+let lastTime=0;
+function loop(now){
+  const dt=Math.min(now-lastTime,50); lastTime=now;
+  if(gs==='playing'){
+    player.update(dt);
+    torpedoes.forEach((t,i)=>{
+      t.x+=t.vx*(dt/1000); t.y+=t.vy*(dt/1000);
+      for(let j=0;j<2;j++) bubbles.push({x:t.x+(Math.random()-0.5)*8,y:t.y+(Math.random()-0.5)*8,r:Math.random()*2+1,speed:0.5,alpha:0.3});
+      if(t.x<-20||t.x>W+20||t.y<-20||t.y>H+20||Date.now()-t.born>3000) torpedoes.splice(i,1);
+    });
+    enemies.forEach(e=>e.update(dt));
+    particles.forEach((p,i)=>{p.update();if(p.life<=0)particles.splice(i,1);});
+    powerUps.forEach(p=>p.update(dt));
+    checkCollisions(); updateHUD();
+  }
+  drawOcean();
+  if(gs==='playing'||gs==='paused'){
+    powerUps.forEach(p=>p.draw());
+    torpedoes.forEach(t=>{
+      ctx.save(); ctx.shadowBlur=12; ctx.shadowColor=t.owner==='player'?'#aaddff':(t.color||'#ff8800');
+      const tg=ctx.createRadialGradient(t.x,t.y,0,t.x,t.y,t.r*1.5);
+      tg.addColorStop(0,'#fff'); tg.addColorStop(0.5,t.owner==='player'?'#aaddff':(t.color||'#ff8800')); tg.addColorStop(1,'transparent');
+      ctx.fillStyle=tg; ctx.beginPath(); ctx.arc(t.x,t.y,t.r,0,Math.PI*2); ctx.fill(); ctx.restore();
+    });
+    enemies.forEach(e=>e.draw());
+    particles.forEach(p=>p.draw());
+    player.draw();
+    if(enemies.length===0&&gs==='playing'){
+      ctx.fillStyle='rgba(0,200,255,0.9)'; ctx.font='bold 26px Exo 2'; ctx.textAlign='center';
+      ctx.fillText('DEPTH '+wave+' CLEARED!',W/2,H/2-20); ctx.font='18px Exo 2';
+      ctx.fillText('Diving deeper...',W/2,H/2+15); ctx.textAlign='left';
+    }
+    if(combo>=3){ ctx.fillStyle='#00ffaa'; ctx.font='bold 18px Exo 2'; ctx.textAlign='right';
+      ctx.fillText('🦈 FEEDING FRENZY x'+combo,W-15,35); ctx.textAlign='left'; }
+    if(gs==='paused'){
+      ctx.fillStyle='rgba(0,10,30,0.8)'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='#00aaff'; ctx.font='bold 40px Pirata One'; ctx.textAlign='center';
+      ctx.fillText('PAUSED',W/2,H/2); ctx.font='18px Exo 2'; ctx.fillText('Press P to continue',W/2,H/2+40); ctx.textAlign='left';
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function startGame(){
+  gs='playing'; document.getElementById('ls').style.display='none'; document.getElementById('hud').style.display='block';
+  player=new Shark(); initOcean(); spawnWave(); requestAnimationFrame(loop);
+}
+function restartGame(){
+  score=0;wave=1;kills=0;combo=0;maxCombo=0;
+  torpedoes=[];enemies=[];particles=[];powerUps=[]; player=new Shark(); initOcean();
+  document.getElementById('ov').style.display='none'; gs='playing'; spawnWave();
+}
+
+(function(){
+  const msgs=['Diving to the abyss...','Sensing vibrations...','Locating prey...','Sharpening teeth...','The deep awaits'];
+  let prog=0,mi=0;
+  const iv=setInterval(()=>{
+    prog+=Math.random()*15+5; if(prog>100)prog=100;
+    document.getElementById('lb').style.width=prog+'%';
+    if(mi<msgs.length-1&&prog>(mi+1)*20){mi++;document.getElementById('lt').textContent=msgs[mi];}
+    if(prog>=100){clearInterval(iv);document.getElementById('sb').classList.add('show');}
+  },200);
+})();
+
+document.addEventListener('keydown',e=>{
+  ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(e.code)&&e.preventDefault();
+  keys[e.code]=true;
+  if(e.code==='KeyP'&&gs==='playing')gs='paused'; else if(e.code==='KeyP'&&gs==='paused')gs='playing';
+  if(e.code==='KeyR'&&gs==='gameOver')restartGame();
+});
+document.addEventListener('keyup',e=>keys[e.code]=false);
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;});
+canvas.addEventListener('mousedown',()=>mouse.pressed=gs==='playing');
+canvas.addEventListener('mouseup',()=>mouse.pressed=false);
+document.getElementById('sb').addEventListener('click',startGame);
+document.getElementById('ov').addEventListener('click',()=>gs==='gameOver'&&restartGame());
+</script>
+</body>
+</html>

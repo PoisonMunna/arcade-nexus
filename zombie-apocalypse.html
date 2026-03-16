@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zombie Apocalypse</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Creepster&family=Russo+One&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: radial-gradient(circle at center, #1a0a00 0%, #0d0500 100%);
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 100vh; font-family: 'Russo One', sans-serif; overflow-x: hidden;
+  }
+  #gameContainer {
+    position: relative; margin: 20px auto;
+    box-shadow: 0 0 60px rgba(150,255,0,0.3), 0 0 120px rgba(150,255,0,0.1);
+    border-radius: 8px; border: 2px solid rgba(150,255,0,0.4);
+  }
+  canvas { display: block; border-radius: 8px; cursor: crosshair; background: #111; }
+  .hud {
+    position: absolute; top: 15px; left: 15px;
+    color: #96ff00; font-size: 14px; z-index: 10;
+    text-shadow: 0 0 10px #96ff00; pointer-events: none;
+  }
+  .hud div {
+    margin-bottom: 6px; padding: 6px 14px;
+    background: rgba(0,0,0,0.8); border: 1px solid rgba(150,255,0,0.3);
+    border-radius: 15px;
+  }
+  #loadingScreen {
+    position: absolute; top:0; left:0; width:100%; height:100%;
+    background: linear-gradient(135deg, #0a0500 0%, #1a0800 100%);
+    display: flex; flex-direction: column; justify-content: center;
+    align-items: center; z-index: 100; border-radius: 8px;
+  }
+  .game-title {
+    font-family: 'Creepster', cursive; font-size: clamp(2.5rem, 8vw, 5rem);
+    color: #96ff00; text-shadow: 0 0 30px #96ff00, 0 0 60px #4a8000;
+    margin-bottom: 10px; letter-spacing: 4px; text-align: center;
+  }
+  .subtitle { color: #ff4400; font-size: 1rem; margin-bottom: 2rem; opacity: 0.8; }
+  .bar-wrap { width: min(300px,70%); height: 8px; background: rgba(150,255,0,0.2); border-radius: 4px; margin-bottom: 1.5rem; overflow: hidden; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg,#96ff00,#4a8000); width: 0%; transition: width 0.3s; box-shadow: 0 0 10px #96ff00; }
+  #loadText { color: rgba(150,255,0,0.7); font-size: 0.85rem; margin-bottom: 2rem; }
+  .btn {
+    padding: 14px 40px; border: none; border-radius: 25px;
+    font-family: 'Russo One', sans-serif; font-size: 1.1rem;
+    cursor: pointer; transition: all 0.3s; opacity: 0; transform: translateY(20px);
+    background: linear-gradient(45deg, #96ff00, #4a8000);
+    color: #0a0500; font-weight: 900; letter-spacing: 2px;
+    box-shadow: 0 0 20px rgba(150,255,0,0.5);
+  }
+  .btn.show { opacity: 1; transform: translateY(0); }
+  .btn:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(150,255,0,0.8); }
+  .overlay {
+    position: absolute; top:50%; left:50%; transform: translate(-50%,-50%);
+    background: rgba(0,0,0,0.95); border: 2px solid rgba(150,255,0,0.5);
+    border-radius: 16px; padding: 35px; text-align: center;
+    color: #96ff00; display: none; z-index: 20; width: min(420px,90%);
+    backdrop-filter: blur(20px);
+  }
+  .overlay h2 { font-family:'Creepster',cursive; font-size:2.5rem; margin-bottom:15px; text-shadow:0 0 20px #96ff00; }
+  .overlay p { margin: 8px 0; font-size: 1rem; color: rgba(150,255,0,0.9); }
+  .overlay .hint { margin-top: 20px; opacity:0.6; font-size:0.85rem; }
+  .ammo-bar {
+    position: absolute; bottom: 15px; right: 15px;
+    color: #ffaa00; font-size: 13px; pointer-events: none; z-index: 10;
+    background: rgba(0,0,0,0.8); border: 1px solid rgba(255,170,0,0.3);
+    border-radius: 15px; padding: 6px 14px;
+    text-shadow: 0 0 8px #ffaa00;
+  }
+  .controls-info {
+    position: absolute; bottom: 15px; left: 15px;
+    color: rgba(150,255,0,0.6); font-size: 11px; z-index: 10;
+    background: rgba(0,0,0,0.5); padding: 6px 10px;
+    border-radius: 8px; pointer-events: none;
+  }
+  .controls-info div { margin-bottom: 3px; }
+  @keyframes flicker { 0%,100%{opacity:1} 50%{opacity:0.7} }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <div id="loadingScreen">
+    <div class="game-title">☣ ZOMBIE<br>APOCALYPSE</div>
+    <div class="subtitle">SURVIVE THE HORDE</div>
+    <div class="bar-wrap"><div class="bar-fill" id="loadBar"></div></div>
+    <div id="loadText">Loading gore engine...</div>
+    <button class="btn" id="startBtn">SURVIVE</button>
+  </div>
+  <canvas id="gameCanvas"></canvas>
+  <div class="hud" id="hud" style="display:none">
+    <div>❤ HEALTH: <span id="hp">100</span>%</div>
+    <div>🌊 WAVE: <span id="waveNum">1</span></div>
+    <div>💀 KILLS: <span id="kills">0</span></div>
+    <div>⭐ SCORE: <span id="score">0</span></div>
+  </div>
+  <div class="ammo-bar" id="ammoBar" style="display:none">🔫 AMMO: <span id="ammo">30</span> | RELOAD: R</div>
+  <div class="controls-info" id="ctrlInfo">
+    <div>WASD / Arrows: Move</div>
+    <div>Mouse: Aim & Shoot</div>
+    <div>R: Reload | P: Pause</div>
+  </div>
+  <div class="overlay" id="gameOverlay">
+    <h2 id="overlayTitle">GAME OVER</h2>
+    <p id="ol1"></p><p id="ol2"></p><p id="ol3"></p><p id="ol4"></p>
+    <div class="hint" id="olHint">Press R to restart</div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const W = 900, H = 620;
+canvas.width = W; canvas.height = H;
+document.getElementById('gameContainer').style.width = W+'px';
+
+// Game state
+let gs = 'loading';
+let score=0, wave=1, killCount=0, combo=0, maxCombo=0;
+let ammo=30, maxAmmo=30, reloading=false, reloadTimer=0;
+let scoreMulti=1;
+
+// Objects
+let player, bullets=[], zombies=[], particles=[], powerUps=[], bloodStains=[];
+const keys={}, mouse={x:W/2,y:H/2,pressed:false};
+
+// City tiles for background
+const cityTiles = [];
+function initCity() {
+  cityTiles.length = 0;
+  // Roads
+  for(let x=0;x<W;x+=80) for(let y=0;y<H;y+=80) {
+    if(Math.random()<0.3) cityTiles.push({x,y,w:80,h:80,type:'road'});
+    else cityTiles.push({x,y,w:80,h:80,type:Math.random()<0.5?'grass':'concrete'});
+  }
+}
+
+// Blood stain
+function addBlood(x,y) {
+  bloodStains.push({x,y,r:Math.random()*15+5,alpha:0.6+Math.random()*0.3});
+  if(bloodStains.length>80) bloodStains.shift();
+}
+
+class Particle {
+  constructor(x,y,col,type){
+    this.x=x; this.y=y; this.color=col;
+    this.vx=(Math.random()-0.5)*8; this.vy=(Math.random()-0.5)*8;
+    this.life=type==='blood'?40:25; this.maxLife=this.life;
+    this.size=type==='blood'?Math.random()*5+2:Math.random()*4+1;
+    this.type=type;
+  }
+  update(){ this.x+=this.vx; this.y+=this.vy; this.vx*=0.93; this.vy*=0.93; this.life--; }
+  draw(){
+    ctx.save(); ctx.globalAlpha=this.life/this.maxLife;
+    ctx.fillStyle=this.color; ctx.beginPath();
+    ctx.arc(this.x,this.y,this.size,0,Math.PI*2); ctx.fill(); ctx.restore();
+  }
+}
+
+class Player {
+  constructor(){ this.x=W/2; this.y=H/2; this.r=16; this.speed=220; this.hp=100; this.maxHp=100; this.angle=0; this.invTimer=0; }
+  update(dt){
+    let dx=0,dy=0;
+    if(keys['KeyW']||keys['ArrowUp']) dy-=1;
+    if(keys['KeyS']||keys['ArrowDown']) dy+=1;
+    if(keys['KeyA']||keys['ArrowLeft']) dx-=1;
+    if(keys['KeyD']||keys['ArrowRight']) dx+=1;
+    if(dx&&dy){dx*=0.707;dy*=0.707;}
+    this.x=Math.max(this.r,Math.min(W-this.r,this.x+dx*this.speed*(dt/1000)));
+    this.y=Math.max(this.r,Math.min(H-this.r,this.y+dy*this.speed*(dt/1000)));
+    this.angle=Math.atan2(mouse.y-this.y,mouse.x-this.x);
+    if(this.invTimer>0) this.invTimer-=dt;
+    if(reloading){ reloadTimer-=dt; if(reloadTimer<=0){ammo=maxAmmo;reloading=false;} }
+    if((mouse.pressed||keys['Space'])&&!reloading&&ammo>0) this.shoot(dt);
+  }
+  _lastShot=0;
+  shoot(dt){
+    const now=Date.now();
+    if(now-this._lastShot<120) return;
+    this._lastShot=now;
+    const spd=600; const a=this.angle;
+    const ox=Math.cos(a+Math.PI/2)*10, oy=Math.sin(a+Math.PI/2)*10;
+    bullets.push({x:this.x+ox,y:this.y+oy,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,owner:'player',dmg:25,r:5,born:Date.now()});
+    for(let i=0;i<3;i++) particles.push(new Particle(this.x+Math.cos(a)*20,this.y+Math.sin(a)*20,'#ffcc00','muzzle'));
+    ammo--;
+    if(ammo<=0){reloading=true;reloadTimer=2000;}
+  }
+  takeDmg(d){ if(this.invTimer>0)return; this.hp-=d; this.invTimer=800; combo=0;
+    for(let i=0;i<8;i++) particles.push(new Particle(this.x,this.y,'#ff2200','blood'));
+    addBlood(this.x,this.y);
+    if(this.hp<=0){this.hp=0;endGame();}
+    canvas.style.filter='brightness(2)'; setTimeout(()=>canvas.style.filter='',100);
+  }
+  draw(){
+    if(this.invTimer>0&&Math.floor(this.invTimer/100)%2===0) return;
+    ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle);
+    // Body
+    ctx.fillStyle='#4a7a00'; ctx.beginPath(); ctx.arc(0,0,this.r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#2a4a00'; ctx.fillRect(-8,-4,16,8);
+    // Gun
+    ctx.fillStyle='#333'; ctx.fillRect(8,-3,16,6); ctx.fillStyle='#555'; ctx.fillRect(18,-2,8,4);
+    // Head
+    ctx.fillStyle='#c8a070'; ctx.beginPath(); ctx.arc(-2,0,8,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    // Flashlight beam
+    ctx.save(); ctx.globalAlpha=0.08;
+    const grd=ctx.createConicalGradient?null:null;
+    ctx.fillStyle='#ffffaa';
+    ctx.beginPath(); ctx.moveTo(this.x,this.y);
+    ctx.arc(this.x,this.y,200,this.angle-0.3,this.angle+0.3);
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+}
+
+class Zombie {
+  constructor(x,y,type='normal'){
+    this.x=x; this.y=y; this.type=type;
+    this.r=type==='tank'?22:type==='runner'?12:15;
+    this.speed=type==='runner'?130:type==='tank'?50:65+wave*3;
+    this.hp=type==='tank'?180+wave*20:type==='runner'?40+wave*5:60+wave*10;
+    this.maxHp=this.hp; this.angle=0; this.lastAtk=0;
+    this.wobble=Math.random()*Math.PI*2;
+    this.color=type==='tank'?'#3a1a00':type==='runner'?'#006600':'#1a5a00';
+    this.skinColor=type==='tank'?'#5a3a00':type==='runner'?'#3a7a3a':'#4a7a4a';
+  }
+  update(dt){
+    const dx=player.x-this.x, dy=player.y-this.y;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    this.angle=Math.atan2(dy,dx);
+    this.wobble+=dt*0.005;
+    if(dist>this.r+player.r+2){
+      const s=this.speed*(dt/1000);
+      this.x+=dx/dist*s; this.y+=dy/dist*s;
+    }
+    this.x=Math.max(this.r,Math.min(W-this.r,this.x));
+    this.y=Math.max(this.r,Math.min(H-this.r,this.y));
+    if(dist<this.r+player.r){
+      const now=Date.now();
+      if(now-this.lastAtk>1200){ player.takeDmg(this.type==='tank'?20:this.type==='runner'?8:12); this.lastAtk=now; }
+    }
+  }
+  takeDmg(d){
+    this.hp-=d;
+    for(let i=0;i<6;i++) particles.push(new Particle(this.x,this.y,'#880000','blood'));
+    addBlood(this.x,this.y);
+    if(this.hp<=0) this.die();
+  }
+  die(){
+    const pts=this.type==='tank'?300:this.type==='runner'?150:100;
+    score+=Math.floor(pts*wave*scoreMulti); killCount++;
+    combo++; maxCombo=Math.max(maxCombo,combo);
+    if(Math.random()<(this.type==='tank'?0.7:0.2)) powerUps.push(new PowerUp(this.x,this.y));
+    for(let i=0;i<(this.type==='tank'?25:12);i++) particles.push(new Particle(this.x,this.y,'#660000','blood'));
+    addBlood(this.x,this.y); addBlood(this.x+10,this.y-10);
+    zombies.splice(zombies.indexOf(this),1);
+    if(zombies.length===0) setTimeout(nextWave,2500);
+  }
+  draw(){
+    ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle+Math.sin(this.wobble)*0.15);
+    // Body
+    ctx.fillStyle=this.color; ctx.beginPath(); ctx.arc(0,0,this.r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=this.skinColor; ctx.beginPath(); ctx.arc(-2,0,this.r*0.55,0,Math.PI*2); ctx.fill();
+    // Eyes (menacing red)
+    ctx.fillStyle='#ff0000'; ctx.beginPath(); ctx.arc(4,-4,3,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#ff0000'; ctx.beginPath(); ctx.arc(4,4,3,0,Math.PI*2); ctx.fill();
+    // Arms outstretched
+    ctx.strokeStyle=this.skinColor; ctx.lineWidth=5;
+    ctx.beginPath(); ctx.moveTo(-5,-this.r*0.6); ctx.lineTo(10,-this.r); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-5,this.r*0.6); ctx.lineTo(10,this.r); ctx.stroke();
+    ctx.restore();
+    // HP bar
+    const bw=this.r*2.5; const bx=this.x-bw/2; const by=this.y-this.r-10;
+    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(bx,by,bw,4);
+    ctx.fillStyle=this.hp/this.maxHp>0.5?'#96ff00':'#ff4400';
+    ctx.fillRect(bx,by,bw*(this.hp/this.maxHp),4);
+    if(this.type==='tank'){ ctx.fillStyle='#ffaa00'; ctx.font='bold 10px Russo One'; ctx.textAlign='center'; ctx.fillText('TANK',this.x,by-4); }
+  }
+}
+
+class PowerUp {
+  constructor(x,y){ this.x=x; this.y=y; this.r=14; this.t=0;
+    const r=Math.random(); this.type=r<0.4?'health':r<0.7?'ammo':'speed';
+    this.color=this.type==='health'?'#ff4455':this.type==='ammo'?'#ffcc00':'#00ccff';
+  }
+  update(dt){ this.t+=dt; if(this.t>8000){powerUps.splice(powerUps.indexOf(this),1);} }
+  draw(){
+    const p=1+Math.sin(this.t/200)*0.2;
+    ctx.save(); ctx.shadowBlur=15; ctx.shadowColor=this.color;
+    ctx.fillStyle=this.color; ctx.beginPath(); ctx.arc(this.x,this.y,this.r*p,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font='bold 14px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(this.type==='health'?'♥':this.type==='ammo'?'⊕':'⚡',this.x,this.y);
+    ctx.restore();
+  }
+}
+
+function spawnWave(){
+  const count=5+Math.floor(wave*1.5);
+  for(let i=0;i<count;i++){
+    const side=Math.floor(Math.random()*4);
+    let x,y;
+    if(side===0){x=Math.random()*W;y=-30;}
+    else if(side===1){x=W+30;y=Math.random()*H;}
+    else if(side===2){x=Math.random()*W;y=H+30;}
+    else{x=-30;y=Math.random()*H;}
+    const r=Math.random();
+    const type=wave>=3&&r<0.15?'tank':wave>=2&&r<0.35?'runner':'normal';
+    zombies.push(new Zombie(x,y,type));
+  }
+}
+function nextWave(){ wave++; setTimeout(spawnWave,500); }
+function endGame(){
+  gs='gameOver';
+  document.getElementById('gameOverlay').style.display='block';
+  document.getElementById('overlayTitle').textContent='☠ YOU DIED';
+  document.getElementById('ol1').textContent='Score: '+Math.floor(score);
+  document.getElementById('ol2').textContent='Zombies Killed: '+killCount;
+  document.getElementById('ol3').textContent='Waves Survived: '+wave;
+  document.getElementById('ol4').textContent='Max Combo: '+maxCombo+'x';
+}
+
+function drawBg(){
+  ctx.fillStyle='#1a1a0a'; ctx.fillRect(0,0,W,H);
+  // Draw city tiles
+  cityTiles.forEach(t=>{
+    ctx.fillStyle=t.type==='road'?'#2a2a2a':t.type==='grass'?'#1a2a0a':'#1e1e1e';
+    ctx.fillRect(t.x,t.y,t.w,t.h);
+    ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=1;
+    ctx.strokeRect(t.x,t.y,t.w,t.h);
+  });
+  // Blood stains on ground
+  bloodStains.forEach(b=>{
+    ctx.save(); ctx.globalAlpha=b.alpha*0.4;
+    ctx.fillStyle='#440000'; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill(); ctx.restore();
+  });
+}
+
+function updateHUD(){
+  document.getElementById('hp').textContent=Math.max(0,Math.floor(player.hp));
+  document.getElementById('waveNum').textContent=wave;
+  document.getElementById('kills').textContent=killCount;
+  document.getElementById('score').textContent=Math.floor(score);
+  document.getElementById('ammo').textContent=reloading?'RELOADING...':ammo;
+}
+
+function checkCollisions(){
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i]; if(b.owner!=='player') continue;
+    for(let j=zombies.length-1;j>=0;j--){
+      const z=zombies[j];
+      const dx=b.x-z.x,dy=b.y-z.y;
+      if(Math.sqrt(dx*dx+dy*dy)<b.r+z.r){ z.takeDmg(b.dmg); bullets.splice(i,1); break; }
+    }
+  }
+  for(let i=powerUps.length-1;i>=0;i--){
+    const p=powerUps[i];
+    const dx=player.x-p.x,dy=player.y-p.y;
+    if(Math.sqrt(dx*dx+dy*dy)<player.r+p.r){
+      if(p.type==='health') player.hp=Math.min(player.maxHp,player.hp+40);
+      else if(p.type==='ammo'){ammo=maxAmmo;reloading=false;}
+      else player.speed=320;
+      for(let j=0;j<15;j++) particles.push(new Particle(p.x,p.y,p.color,'muzzle'));
+      powerUps.splice(i,1);
+    }
+  }
+}
+
+let lastTime=0;
+function loop(now){
+  const dt=Math.min(now-lastTime,50); lastTime=now;
+  if(gs==='playing'){
+    player.update(dt);
+    bullets.forEach((b,i)=>{ b.x+=b.vx*(dt/1000); b.y+=b.vy*(dt/1000); if(b.x<0||b.x>W||b.y<0||b.y>H||Date.now()-b.born>3000) bullets.splice(i,1); });
+    zombies.forEach(z=>z.update(dt));
+    particles.forEach((p,i)=>{ p.update(); if(p.life<=0) particles.splice(i,1); });
+    powerUps.forEach(p=>p.update(dt));
+    checkCollisions(); updateHUD();
+  }
+  drawBg();
+  if(gs==='playing'||gs==='paused'){
+    powerUps.forEach(p=>p.draw());
+    player.draw();
+    bullets.forEach(b=>{
+      ctx.save(); ctx.shadowBlur=8; ctx.shadowColor='#ffcc00';
+      ctx.fillStyle='#ffee55'; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill(); ctx.restore();
+    });
+    zombies.forEach(z=>z.draw());
+    particles.forEach(p=>p.draw());
+    if(zombies.length===0&&gs==='playing'){
+      ctx.fillStyle='rgba(150,255,0,0.9)'; ctx.font='bold 28px Russo One';
+      ctx.textAlign='center'; ctx.fillText('WAVE '+wave+' CLEARED!',W/2,H/2-20);
+      ctx.font='18px Russo One'; ctx.fillText('Next wave incoming...',W/2,H/2+15);
+      ctx.textAlign='left';
+    }
+    if(gs==='paused'){
+      ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='#96ff00'; ctx.font='bold 40px Creepster'; ctx.textAlign='center';
+      ctx.fillText('PAUSED',W/2,H/2); ctx.font='18px Russo One';
+      ctx.fillText('Press P to continue',W/2,H/2+40); ctx.textAlign='left';
+    }
+    // Combo
+    if(combo>=3){
+      ctx.fillStyle='#ff8800'; ctx.font='bold 20px Russo One'; ctx.textAlign='right';
+      ctx.fillText('COMBO x'+combo+' ['+scoreMulti.toFixed(1)+'x]',W-15,35); ctx.textAlign='left';
+      scoreMulti=1+combo*0.1;
+    }else scoreMulti=1;
+    // Reload indicator
+    if(reloading){
+      ctx.fillStyle='#ffcc00'; ctx.font='bold 18px Russo One'; ctx.textAlign='center';
+      ctx.fillText('⟳ RELOADING...',W/2,H-20); ctx.textAlign='left';
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function startGame(){
+  gs='playing'; bloodStains=[];
+  document.getElementById('loadingScreen').style.display='none';
+  document.getElementById('hud').style.display='block';
+  document.getElementById('ammoBar').style.display='block';
+  player=new Player(); initCity(); spawnWave(); requestAnimationFrame(loop);
+}
+function restartGame(){
+  score=0;wave=1;killCount=0;combo=0;maxCombo=0;ammo=maxAmmo;reloading=false;
+  bullets=[];zombies=[];particles=[];powerUps=[];bloodStains=[];
+  player=new Player(); initCity();
+  document.getElementById('gameOverlay').style.display='none';
+  gs='playing'; spawnWave();
+}
+
+// Loading
+(function(){
+  const msgs=['Loading gore engine...','Spawning undead...','Arming survivors...','Scanning city...','Systems online'];
+  let prog=0,mi=0;
+  const iv=setInterval(()=>{
+    prog+=Math.random()*15+5; if(prog>100)prog=100;
+    document.getElementById('loadBar').style.width=prog+'%';
+    if(mi<msgs.length-1&&prog>(mi+1)*20){mi++;document.getElementById('loadText').textContent=msgs[mi];}
+    if(prog>=100){clearInterval(iv);document.getElementById('startBtn').classList.add('show');}
+  },200);
+})();
+
+// Events
+document.addEventListener('keydown',e=>{
+  ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(e.code)&&e.preventDefault();
+  keys[e.code]=true;
+  if(e.code==='KeyP'&&gs==='playing'){gs='paused';}
+  else if(e.code==='KeyP'&&gs==='paused'){gs='playing';}
+  if(e.code==='KeyR'&&gs==='gameOver') restartGame();
+  if(e.code==='KeyR'&&gs==='playing'&&!reloading&&ammo<maxAmmo){reloading=true;reloadTimer=2000;}
+});
+document.addEventListener('keyup',e=>keys[e.code]=false);
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;});
+canvas.addEventListener('mousedown',()=>mouse.pressed=true);
+canvas.addEventListener('mouseup',()=>mouse.pressed=false);
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('gameOverlay').addEventListener('click',()=>gs==='gameOver'&&restartGame());
+</script>
+</body>
+</html>

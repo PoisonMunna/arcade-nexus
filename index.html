@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARCADE NEXUS — Game Hub</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rajdhani:wght@400;600;700&family=Orbitron:wght@400;700;900&display=swap');
+
+:root {
+  --c-bg: #03020a;
+  --c-surface: #080615;
+  --c-border: rgba(255,255,255,0.06);
+  --c-text: #e8e0ff;
+  --c-muted: rgba(220,210,255,0.45);
+  --zombie: #7fff00;
+  --dragon: #ff6a00;
+  --cyber: #00f5ff;
+  --ocean: #0099ff;
+  --glow-zombie: rgba(127,255,0,0.35);
+  --glow-dragon: rgba(255,106,0,0.35);
+  --glow-cyber: rgba(0,245,255,0.35);
+  --glow-ocean: rgba(0,153,255,0.35);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+html, body {
+  width:100%; min-height:100vh;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: 'Rajdhani', sans-serif;
+  overflow-x: hidden;
+  cursor: default;
+}
+
+/* ── CUSTOM CURSOR ── */
+* { cursor: none !important; }
+#cursor {
+  position: fixed; width:18px; height:18px;
+  border: 2px solid rgba(255,255,255,0.8);
+  border-radius: 50%; pointer-events: none; z-index: 99999;
+  transform: translate(-50%,-50%);
+  transition: width 0.15s, height 0.15s, border-color 0.2s, background 0.2s;
+  mix-blend-mode: difference;
+}
+#cursor.big { width:36px; height:36px; background: rgba(255,255,255,0.08); }
+
+/* ── ANIMATED BACKGROUND CANVAS ── */
+#bgCanvas {
+  position: fixed; top:0; left:0; width:100%; height:100%;
+  z-index: 0; pointer-events: none;
+}
+
+/* ── NOISE OVERLAY ── */
+body::after {
+  content:''; position:fixed; top:0; left:0; width:100%; height:100%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 1; opacity: 0.4;
+}
+
+/* ── LAYOUT WRAPPER ── */
+#hubScreen, #gameScreen {
+  position: relative; z-index: 2;
+}
+#gameScreen { display: none; }
+
+/* ══════════════════════════════
+   INTRO / HUB SCREEN
+══════════════════════════════ */
+
+/* Hero header */
+.hero {
+  text-align: center;
+  padding: 70px 20px 50px;
+  position: relative;
+}
+.hero-eyebrow {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.72rem; letter-spacing: 6px;
+  color: var(--c-muted);
+  text-transform: uppercase;
+  margin-bottom: 18px;
+  animation: fadeSlideDown 0.8s ease both;
+}
+.hero-title {
+  font-family: 'Black Ops One', cursive;
+  font-size: clamp(3.2rem, 9vw, 7.5rem);
+  line-height: 0.9;
+  letter-spacing: 2px;
+  background: linear-gradient(135deg, #ffffff 0%, #c8b8ff 40%, #8866ff 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: fadeSlideDown 0.9s 0.1s ease both;
+  filter: drop-shadow(0 0 40px rgba(140,100,255,0.4));
+}
+.hero-sub {
+  font-size: 1.1rem; font-weight: 600; letter-spacing: 3px;
+  color: var(--c-muted); margin-top: 16px;
+  animation: fadeSlideDown 1s 0.2s ease both;
+}
+.hero-line {
+  width: 120px; height: 1px; margin: 28px auto 0;
+  background: linear-gradient(90deg, transparent, rgba(140,100,255,0.7), transparent);
+  animation: fadeSlideDown 1s 0.3s ease both;
+}
+
+/* Scrolling ticker */
+.ticker-wrap {
+  overflow: hidden; border-top: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-border);
+  padding: 10px 0; margin-bottom: 60px; background: rgba(255,255,255,0.015);
+}
+.ticker {
+  display: flex; gap: 80px; width: max-content;
+  animation: ticker 25s linear infinite;
+  font-family: 'Orbitron', monospace; font-size: 0.72rem;
+  letter-spacing: 3px; color: var(--c-muted);
+}
+.ticker span { white-space: nowrap; }
+.ticker-dot { color: rgba(140,100,255,0.5); }
+@keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+
+/* Game grid */
+.games-label {
+  text-align: center;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.7rem; letter-spacing: 5px;
+  color: var(--c-muted); margin-bottom: 36px;
+  animation: fadeSlideDown 1s 0.4s ease both;
+}
+
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 30px 80px;
+}
+
+/* ── GAME CARD ── */
+.game-card {
+  position: relative;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--c-surface);
+  transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.35s ease;
+  animation: cardReveal 0.7s ease both;
+  cursor: none;
+}
+.game-card:nth-child(1){animation-delay:0.5s}
+.game-card:nth-child(2){animation-delay:0.65s}
+.game-card:nth-child(3){animation-delay:0.8s}
+.game-card:nth-child(4){animation-delay:0.95s}
+
+.game-card:hover {
+  transform: translateY(-8px) scale(1.015);
+}
+.game-card.zombie:hover  { box-shadow: 0 24px 60px var(--glow-zombie),  0 0 0 1px rgba(127,255,0,0.3); }
+.game-card.dragon:hover  { box-shadow: 0 24px 60px var(--glow-dragon),  0 0 0 1px rgba(255,106,0,0.3); }
+.game-card.cyber:hover   { box-shadow: 0 24px 60px var(--glow-cyber),   0 0 0 1px rgba(0,245,255,0.3); }
+.game-card.ocean:hover   { box-shadow: 0 24px 60px var(--glow-ocean),   0 0 0 1px rgba(0,153,255,0.3); }
+
+/* Card canvas preview */
+.card-canvas-wrap {
+  position: relative; height: 210px; overflow: hidden;
+}
+.card-preview-canvas {
+  width: 100%; height: 100%; display: block;
+}
+.card-overlay {
+  position: absolute; inset:0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(8,6,21,0.85) 100%);
+}
+
+/* Card accent bar */
+.card-accent {
+  position: absolute; top:0; left:0; right:0; height:3px;
+}
+.zombie .card-accent  { background: linear-gradient(90deg, transparent, var(--zombie),  transparent); }
+.dragon .card-accent  { background: linear-gradient(90deg, transparent, var(--dragon),  transparent); }
+.cyber  .card-accent  { background: linear-gradient(90deg, transparent, var(--cyber),   transparent); }
+.ocean  .card-accent  { background: linear-gradient(90deg, transparent, var(--ocean),   transparent); }
+
+/* Card number badge */
+.card-num {
+  position: absolute; top:16px; right:18px;
+  font-family: 'Orbitron', monospace; font-size: 0.65rem;
+  font-weight: 700; letter-spacing: 2px;
+  padding: 3px 10px; border-radius: 20px;
+  border: 1px solid currentColor; opacity: 0.6;
+}
+.zombie .card-num { color: var(--zombie); }
+.dragon .card-num { color: var(--dragon); }
+.cyber  .card-num { color: var(--cyber);  }
+.ocean  .card-num { color: var(--ocean);  }
+
+/* Card body */
+.card-body { padding: 22px 24px 26px; }
+.card-emoji { font-size: 2rem; margin-bottom: 10px; display: block; }
+.card-title {
+  font-family: 'Black Ops One', cursive;
+  font-size: 1.65rem; line-height: 1; letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+.zombie .card-title  { color: var(--zombie);  text-shadow: 0 0 20px var(--glow-zombie); }
+.dragon .card-title  { color: var(--dragon);  text-shadow: 0 0 20px var(--glow-dragon); }
+.cyber  .card-title  { color: var(--cyber);   text-shadow: 0 0 20px var(--glow-cyber);  }
+.ocean  .card-title  { color: var(--ocean);   text-shadow: 0 0 20px var(--glow-ocean);  }
+
+.card-desc {
+  font-size: 0.95rem; font-weight: 600; color: var(--c-muted);
+  line-height: 1.5; margin-bottom: 18px;
+}
+
+/* Tags */
+.card-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+.tag {
+  font-family: 'Orbitron', monospace; font-size: 0.6rem;
+  letter-spacing: 1.5px; padding: 3px 10px;
+  border-radius: 20px; border: 1px solid currentColor;
+  text-transform: uppercase; opacity: 0.65;
+}
+.zombie .tag { color: var(--zombie); }
+.dragon .tag { color: var(--dragon); }
+.cyber  .tag { color: var(--cyber);  }
+.ocean  .tag { color: var(--ocean);  }
+
+/* Play button */
+.play-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 28px; border-radius: 8px; border: none;
+  font-family: 'Orbitron', monospace; font-size: 0.8rem;
+  font-weight: 700; letter-spacing: 2px;
+  cursor: none; transition: all 0.25s ease;
+  position: relative; overflow: hidden;
+  width: 100%; justify-content: center;
+}
+.play-btn::before {
+  content:''; position:absolute; inset:0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 50%, transparent 100%);
+  transform: translateX(-100%); transition: transform 0.5s ease;
+}
+.play-btn:hover::before { transform: translateX(100%); }
+
+.zombie .play-btn { background: rgba(127,255,0,0.12); color: var(--zombie); border: 1px solid rgba(127,255,0,0.4); }
+.dragon .play-btn { background: rgba(255,106,0,0.12); color: var(--dragon); border: 1px solid rgba(255,106,0,0.4); }
+.cyber  .play-btn { background: rgba(0,245,255,0.10); color: var(--cyber);  border: 1px solid rgba(0,245,255,0.4); }
+.ocean  .play-btn { background: rgba(0,153,255,0.12); color: var(--ocean);  border: 1px solid rgba(0,153,255,0.4); }
+
+.zombie .play-btn:hover { background: rgba(127,255,0,0.22); box-shadow: 0 0 20px var(--glow-zombie); }
+.dragon .play-btn:hover { background: rgba(255,106,0,0.22); box-shadow: 0 0 20px var(--glow-dragon); }
+.cyber  .play-btn:hover { background: rgba(0,245,255,0.20); box-shadow: 0 0 20px var(--glow-cyber);  }
+.ocean  .play-btn:hover { background: rgba(0,153,255,0.22); box-shadow: 0 0 20px var(--glow-ocean);  }
+
+.play-arrow {
+  font-size: 1.1rem;
+  transition: transform 0.25s ease;
+}
+.play-btn:hover .play-arrow { transform: translateX(4px); }
+
+/* Footer */
+.hub-footer {
+  text-align: center; padding: 30px;
+  border-top: 1px solid var(--c-border);
+  font-size: 0.8rem; color: var(--c-muted);
+  font-family: 'Orbitron', monospace; letter-spacing: 2px;
+}
+
+/* ══════════════════════════════
+   GAME SCREEN (iframe wrapper)
+══════════════════════════════ */
+
+.game-topbar {
+  position: fixed; top:0; left:0; right:0; z-index: 9999;
+  height: 52px; background: rgba(3,2,10,0.95);
+  border-bottom: 1px solid var(--c-border);
+  backdrop-filter: blur(20px);
+  display: flex; align-items: center;
+  padding: 0 20px; gap: 20px;
+}
+.back-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 18px; border-radius: 6px;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--c-border);
+  color: var(--c-text); font-family: 'Orbitron', monospace;
+  font-size: 0.7rem; letter-spacing: 2px; cursor: none;
+  transition: all 0.2s ease;
+}
+.back-btn:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); }
+.topbar-game-name {
+  font-family: 'Black Ops One', cursive;
+  font-size: 1.1rem; letter-spacing: 2px;
+  flex:1; text-align: center;
+}
+.topbar-hint {
+  font-family: 'Orbitron', monospace; font-size: 0.65rem;
+  letter-spacing: 2px; color: var(--c-muted);
+}
+
+.game-frame-wrap {
+  padding-top: 52px; width: 100%; height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: #000;
+}
+.game-frame-wrap iframe {
+  width: 100%; height: calc(100vh - 52px);
+  border: none; display: block;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeSlideDown {
+  from { opacity:0; transform: translateY(-20px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+@keyframes cardReveal {
+  from { opacity:0; transform: translateY(30px) scale(0.97); }
+  to   { opacity:1; transform: translateY(0)   scale(1); }
+}
+
+/* ── SPLASH TRANSITION ── */
+#splash {
+  position: fixed; inset:0; z-index: 99990;
+  background: #03020a;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+#splash.active { opacity:1; pointer-events: all; }
+
+/* ── RESPONSIVE ── */
+@media(max-width:720px){
+  .games-grid { grid-template-columns: 1fr; padding: 0 16px 60px; gap: 18px; }
+  .hero { padding: 50px 20px 40px; }
+  .card-canvas-wrap { height: 160px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Custom cursor -->
+<div id="cursor"></div>
+
+<!-- Background canvas -->
+<canvas id="bgCanvas"></canvas>
+
+<!-- Splash transition overlay -->
+<div id="splash"></div>
+
+<!-- ══ HUB SCREEN ══ -->
+<div id="hubScreen">
+
+  <section class="hero">
+    <p class="hero-eyebrow">⬡ SELECT YOUR MISSION ⬡</p>
+    <h1 class="hero-title">ARCADE<br>NEXUS</h1>
+    <p class="hero-sub">FOUR WORLDS. ONE HUB. INFINITE CHAOS.</p>
+    <div class="hero-line"></div>
+  </section>
+
+  <!-- Ticker -->
+  <div class="ticker-wrap">
+    <div class="ticker">
+      <span>☣ ZOMBIE APOCALYPSE</span><span class="ticker-dot">◆</span>
+      <span>🐉 DRAGON REALM</span><span class="ticker-dot">◆</span>
+      <span>🤖 CYBER HACK</span><span class="ticker-dot">◆</span>
+      <span>🦈 OCEAN PREDATOR</span><span class="ticker-dot">◆</span>
+      <span>🚀 STELLAR DEFENSE</span><span class="ticker-dot">◆</span>
+      <span>☣ ZOMBIE APOCALYPSE</span><span class="ticker-dot">◆</span>
+      <span>🐉 DRAGON REALM</span><span class="ticker-dot">◆</span>
+      <span>🤖 CYBER HACK</span><span class="ticker-dot">◆</span>
+      <span>🦈 OCEAN PREDATOR</span><span class="ticker-dot">◆</span>
+      <span>🚀 STELLAR DEFENSE</span><span class="ticker-dot">◆</span>
+    </div>
+  </div>
+
+  <p class="games-label">— CHOOSE YOUR GAME —</p>
+
+  <!-- Game grid -->
+  <div class="games-grid">
+
+    <!-- ZOMBIE -->
+    <div class="game-card zombie" data-game="zombie">
+      <div class="card-accent"></div>
+      <span class="card-num">01</span>
+      <div class="card-canvas-wrap">
+        <canvas class="card-preview-canvas" id="prev-zombie"></canvas>
+        <div class="card-overlay"></div>
+      </div>
+      <div class="card-body">
+        <span class="card-emoji">☣</span>
+        <h2 class="card-title">ZOMBIE<br>APOCALYPSE</h2>
+        <p class="card-desc">Survive endless undead hordes in a ravaged city. Manage ammo, dodge tanks and sprinters — only the ruthless survive.</p>
+        <div class="card-tags">
+          <span class="tag">Shooter</span>
+          <span class="tag">Survival</span>
+          <span class="tag">Top-Down</span>
+          <span class="tag">Ammo System</span>
+        </div>
+        <button class="play-btn" onclick="launchGame('zombie')">
+          PLAY NOW <span class="play-arrow">→</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- DRAGON -->
+    <div class="game-card dragon" data-game="dragon">
+      <div class="card-accent"></div>
+      <span class="card-num">02</span>
+      <div class="card-canvas-wrap">
+        <canvas class="card-preview-canvas" id="prev-dragon"></canvas>
+        <div class="card-overlay"></div>
+      </div>
+      <div class="card-body">
+        <span class="card-emoji">🐉</span>
+        <h2 class="card-title">DRAGON<br>REALM</h2>
+        <p class="card-desc">Soar through a moonlit fantasy sky, unleash fire breath on armies of knights, wizards and siege ballistas.</p>
+        <div class="card-tags">
+          <span class="tag">Fantasy</span>
+          <span class="tag">Fire Breath</span>
+          <span class="tag">Aerial</span>
+          <span class="tag">Wave Clear</span>
+        </div>
+        <button class="play-btn" onclick="launchGame('dragon')">
+          PLAY NOW <span class="play-arrow">→</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- CYBER -->
+    <div class="game-card cyber" data-game="cyber">
+      <div class="card-accent"></div>
+      <span class="card-num">03</span>
+      <div class="card-canvas-wrap">
+        <canvas class="card-preview-canvas" id="prev-cyber"></canvas>
+        <div class="card-overlay"></div>
+      </div>
+      <div class="card-body">
+        <span class="card-emoji">🤖</span>
+        <h2 class="card-title">CYBER<br>HACK</h2>
+        <p class="card-desc">Jack into a neon grid city and terminate rogue bots. Collect data packets, trigger overdrive, and decrypt every node.</p>
+        <div class="card-tags">
+          <span class="tag">Cyberpunk</span>
+          <span class="tag">Neon</span>
+          <span class="tag">Hacking</span>
+          <span class="tag">Overdrive</span>
+        </div>
+        <button class="play-btn" onclick="launchGame('cyber')">
+          PLAY NOW <span class="play-arrow">→</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- OCEAN -->
+    <div class="game-card ocean" data-game="ocean">
+      <div class="card-accent"></div>
+      <span class="card-num">04</span>
+      <div class="card-canvas-wrap">
+        <canvas class="card-preview-canvas" id="prev-ocean"></canvas>
+        <div class="card-overlay"></div>
+      </div>
+      <div class="card-body">
+        <span class="card-emoji">🦈</span>
+        <h2 class="card-title">OCEAN<br>PREDATOR</h2>
+        <p class="card-desc">Rule the deep as the apex predator. Destroy submarines, carriers and scuba divers in bioluminescent waters.</p>
+        <div class="card-tags">
+          <span class="tag">Underwater</span>
+          <span class="tag">Predator</span>
+          <span class="tag">Naval</span>
+          <span class="tag">Bite Attack</span>
+        </div>
+        <button class="play-btn" onclick="launchGame('ocean')">
+          PLAY NOW <span class="play-arrow">→</span>
+        </button>
+      </div>
+    </div>
+
+  </div><!-- end .games-grid -->
+
+  <footer class="hub-footer">
+    ARCADE NEXUS &nbsp;·&nbsp; 4 GAMES &nbsp;·&nbsp; MADE BY MAYANK &nbsp;·&nbsp; 2026
+  </footer>
+
+</div><!-- end #hubScreen -->
+
+
+<!-- ══ GAME SCREEN ══ -->
+<div id="gameScreen">
+  <div class="game-topbar">
+    <button class="back-btn" onclick="backToHub()">
+      ← BACK
+    </button>
+    <span class="topbar-game-name" id="topbarName"></span>
+    <span class="topbar-hint">P = PAUSE &nbsp;·&nbsp; R = RESTART</span>
+  </div>
+  <div class="game-frame-wrap">
+    <iframe id="gameFrame" src="" allowfullscreen></iframe>
+  </div>
+</div>
+
+
+<script>
+/* ─────────────────────────────
+   CUSTOM CURSOR
+───────────────────────────── */
+const cursor = document.getElementById('cursor');
+document.addEventListener('mousemove', e => {
+  cursor.style.left = e.clientX + 'px';
+  cursor.style.top  = e.clientY + 'px';
+});
+document.querySelectorAll('button, .game-card, a').forEach(el => {
+  el.addEventListener('mouseenter', () => cursor.classList.add('big'));
+  el.addEventListener('mouseleave', () => cursor.classList.remove('big'));
+});
+
+/* ─────────────────────────────
+   ANIMATED BG CANVAS
+───────────────────────────── */
+(function(){
+  const c = document.getElementById('bgCanvas');
+  const ctx = c.getContext('2d');
+  let W, H, stars = [], nebulae = [];
+
+  function resize(){
+    W = c.width  = window.innerWidth;
+    H = c.height = window.innerHeight;
+    stars = [];
+    for(let i=0;i<180;i++) stars.push({
+      x: Math.random()*W, y: Math.random()*H,
+      r: Math.random()*1.4+0.2,
+      a: Math.random(), speed: Math.random()*0.4+0.05,
+      twinkle: Math.random()*Math.PI*2
+    });
+    nebulae = [];
+    const cols = ['rgba(80,40,160,', 'rgba(20,80,160,', 'rgba(160,40,80,', 'rgba(20,120,100,'];
+    for(let i=0;i<6;i++) nebulae.push({
+      x: Math.random()*W, y: Math.random()*H,
+      r: Math.random()*300+150,
+      col: cols[Math.floor(Math.random()*cols.length)],
+      a: Math.random()*0.06+0.02
+    });
+  }
+  resize(); window.addEventListener('resize', resize);
+
+  let t = 0;
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // nebulae
+    nebulae.forEach(n => {
+      const g = ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r);
+      g.addColorStop(0, n.col + n.a + ')');
+      g.addColorStop(1, n.col + '0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2); ctx.fill();
+    });
+    // stars
+    t += 0.012;
+    stars.forEach(s => {
+      s.twinkle += 0.04;
+      const alpha = s.a * (0.5 + Math.sin(s.twinkle)*0.5);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ─────────────────────────────
+   CARD PREVIEW CANVASES
+   (animated mini-previews per theme)
+───────────────────────────── */
+function initPreviews(){
+  drawZombiePreview();
+  drawDragonPreview();
+  drawCyberPreview();
+  drawOceanPreview();
+}
+
+// ── Zombie preview: dark city + drifting zombies
+function drawZombiePreview(){
+  const cv = document.getElementById('prev-zombie');
+  const ctx = cv.getContext('2d');
+  cv.width = cv.offsetWidth || 500; cv.height = cv.offsetHeight || 210;
+  const W=cv.width, H=cv.height;
+  let zombies=[], t=0;
+  for(let i=0;i<12;i++) zombies.push({x:Math.random()*W, y:Math.random()*H, vx:(Math.random()-0.5)*0.8, vy:(Math.random()-0.5)*0.8, r:Math.random()*2+1});
+  const bloodStains=[];
+  for(let i=0;i<8;i++) bloodStains.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*18+6});
+  function draw(){
+    ctx.fillStyle='#0d0d05'; ctx.fillRect(0,0,W,H);
+    // grid streets
+    ctx.strokeStyle='rgba(40,40,20,0.8)'; ctx.lineWidth=1;
+    for(let x=0;x<W;x+=55){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for(let y=0;y<H;y+=55){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    // blood
+    bloodStains.forEach(b=>{ ctx.fillStyle='rgba(80,0,0,0.3)'; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill(); });
+    // zombies
+    t++;
+    zombies.forEach(z=>{
+      z.x+=z.vx; z.y+=z.vy;
+      if(z.x<0||z.x>W) z.vx*=-1;
+      if(z.y<0||z.y>H) z.vy*=-1;
+      // glow
+      ctx.save(); ctx.shadowBlur=10; ctx.shadowColor='#4aff00';
+      ctx.fillStyle='#2a8000'; ctx.beginPath(); ctx.arc(z.x,z.y,z.r*5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(150,255,0,0.8)'; ctx.beginPath(); ctx.arc(z.x,z.y,z.r*2,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    });
+    // scan line
+    const sl = (t*2)%H;
+    ctx.strokeStyle='rgba(150,255,0,0.07)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(0,sl); ctx.lineTo(W,sl); ctx.stroke();
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+// ── Dragon preview: purple night + flying sparks
+function drawDragonPreview(){
+  const cv = document.getElementById('prev-dragon');
+  const ctx = cv.getContext('2d');
+  cv.width = cv.offsetWidth||500; cv.height = cv.offsetHeight||210;
+  const W=cv.width, H=cv.height;
+  let sparks=[], t=0;
+  for(let i=0;i<20;i++) sparks.push({x:Math.random()*W, y:Math.random()*H, vx:(Math.random()-0.5)*1.5, vy:(Math.random()-0.5)*1.5-0.3, life:Math.random()*60, maxLife:60, r:Math.random()*3+1});
+  function draw(){
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#08001a'); g.addColorStop(1,'#1a0030');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    // Moon
+    const mg=ctx.createRadialGradient(W-60,30,0,W-60,30,35);
+    mg.addColorStop(0,'#ffffee'); mg.addColorStop(0.6,'#ddddaa'); mg.addColorStop(1,'transparent');
+    ctx.fillStyle=mg; ctx.beginPath(); ctx.arc(W-60,30,35,0,Math.PI*2); ctx.fill();
+    // Castle silhouette
+    ctx.fillStyle='#080012';
+    ctx.fillRect(30,H-80,50,80); ctx.fillRect(65,H-100,20,30);
+    ctx.fillRect(35,H-96,18,28);
+    // sparks
+    t++;
+    sparks.forEach(s=>{
+      s.x+=s.vx; s.y+=s.vy; s.life--;
+      if(s.life<=0){s.x=Math.random()*W*0.6+W*0.2;s.y=H*0.5;s.life=s.maxLife;s.vx=(Math.random()-0.5)*3;s.vy=-(Math.random()*2+1);}
+      const a=s.life/s.maxLife;
+      ctx.save(); ctx.globalAlpha=a;
+      ctx.shadowBlur=8; ctx.shadowColor='#ff6600';
+      ctx.fillStyle=a>0.5?'#ffcc00':'#ff4400';
+      ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    });
+    // Pulsing dragon eye
+    const pulse=0.5+Math.sin(t*0.05)*0.5;
+    ctx.save(); ctx.shadowBlur=30*pulse; ctx.shadowColor='#ff4400';
+    ctx.fillStyle=`rgba(255,100,0,${0.3*pulse})`;
+    ctx.beginPath(); ctx.arc(W/2,H/2,40,0,Math.PI*2); ctx.fill(); ctx.restore();
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+// ── Cyber preview: grid + flying data packets
+function drawCyberPreview(){
+  const cv = document.getElementById('prev-cyber');
+  const ctx = cv.getContext('2d');
+  cv.width = cv.offsetWidth||500; cv.height = cv.offsetHeight||210;
+  const W=cv.width, H=cv.height;
+  let packets=[],t=0;
+  for(let i=0;i<18;i++) packets.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-0.5)*2,vy:Math.random()*2+0.5,len:Math.random()*30+10});
+  function draw(){
+    ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+    // grid
+    ctx.strokeStyle='rgba(0,255,255,0.06)'; ctx.lineWidth=0.5;
+    for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    // intersections
+    for(let x=0;x<W;x+=40) for(let y=0;y<H;y+=40){
+      ctx.fillStyle='rgba(0,255,255,0.15)'; ctx.fillRect(x-1,y-1,2,2);
+    }
+    t++;
+    packets.forEach(p=>{
+      p.y+=p.vy; if(p.y>H+20){p.y=-20;p.x=Math.random()*W;}
+      ctx.save(); ctx.shadowBlur=6; ctx.shadowColor='#00ffff';
+      ctx.strokeStyle='rgba(0,255,255,0.5)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(p.x,p.y-p.len); ctx.stroke(); ctx.restore();
+    });
+    // Pulsing hex
+    const pulse=0.5+Math.sin(t*0.04)*0.5;
+    ctx.save(); ctx.globalAlpha=0.15+0.1*pulse; ctx.strokeStyle='#00ffff'; ctx.lineWidth=2;
+    ctx.shadowBlur=20; ctx.shadowColor='#00ffff';
+    ctx.beginPath();
+    for(let i=0;i<6;i++){const a=i*Math.PI/3; ctx.lineTo(W/2+Math.cos(a)*30,H/2+Math.sin(a)*30);}
+    ctx.closePath(); ctx.stroke(); ctx.restore();
+    // Glitch
+    if(Math.random()<0.02){ const gy=Math.random()*H; ctx.drawImage(cv,0,gy,W,8,Math.random()*8-4,gy,W,8); }
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+// ── Ocean preview: deep water + bubbles
+function drawOceanPreview(){
+  const cv = document.getElementById('prev-ocean');
+  const ctx = cv.getContext('2d');
+  cv.width = cv.offsetWidth||500; cv.height = cv.offsetHeight||210;
+  const W=cv.width, H=cv.height;
+  let bubs=[], t=0;
+  for(let i=0;i<30;i++) bubs.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*4+1,speed:Math.random()*0.6+0.2,alpha:Math.random()*0.4+0.1});
+  function draw(){
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#001a3a'); g.addColorStop(1,'#000510');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    t++;
+    // light rays
+    ctx.save(); ctx.globalAlpha=0.04;
+    for(let i=0;i<5;i++){
+      const rx=W*0.1+i*(W*0.18);
+      const rg=ctx.createLinearGradient(rx,0,rx+40,H);
+      rg.addColorStop(0,'#88ccff'); rg.addColorStop(1,'transparent');
+      ctx.fillStyle=rg; ctx.beginPath();
+      ctx.moveTo(rx+Math.sin(t*0.02+i)*10,0); ctx.lineTo(rx+50,H); ctx.lineTo(rx+30,H); ctx.lineTo(rx-20,0); ctx.closePath(); ctx.fill();
+    } ctx.restore();
+    // bubbles
+    bubs.forEach(b=>{
+      b.y-=b.speed; if(b.y<-10){b.y=H+10;b.x=Math.random()*W;}
+      ctx.save(); ctx.globalAlpha=b.alpha; ctx.strokeStyle='rgba(100,200,255,0.7)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.stroke(); ctx.restore();
+    });
+    // pulsing fish silhouette
+    const pulse=0.5+Math.sin(t*0.06)*0.5;
+    ctx.save(); ctx.globalAlpha=0.12+0.08*pulse;
+    ctx.fillStyle='#0099ff'; ctx.shadowBlur=25; ctx.shadowColor='#0055ff';
+    ctx.beginPath(); ctx.moveTo(W/2+25,H/2); ctx.lineTo(W/2-15,H/2-12); ctx.lineTo(W/2-20,H/2-6); ctx.lineTo(W/2-20,H/2+6); ctx.lineTo(W/2-15,H/2+12); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // seafloor
+    ctx.fillStyle='#001a0a';
+    ctx.beginPath(); ctx.moveTo(0,H);
+    for(let x=0;x<=W;x+=20) ctx.lineTo(x, H-15+Math.sin(x*0.05+t*0.01)*8);
+    ctx.lineTo(W,H); ctx.closePath(); ctx.fill();
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+/* ─────────────────────────────
+   GAME LAUNCH
+───────────────────────────── */
+const gameFiles = {
+  zombie: 'zombie-apocalypse.html',
+  dragon: 'dragon-realm.html',
+  cyber:  'cyber-hack.html',
+  ocean:  'ocean-predator.html'
+};
+const gameNames = {
+  zombie: '☣ ZOMBIE APOCALYPSE',
+  dragon: '🐉 DRAGON REALM',
+  cyber:  '🤖 CYBER HACK',
+  ocean:  '🦈 OCEAN PREDATOR'
+};
+const gameColors = {
+  zombie: '#7fff00',
+  dragon: '#ff6a00',
+  cyber:  '#00f5ff',
+  ocean:  '#0099ff'
+};
+
+function launchGame(id){
+  const splash = document.getElementById('splash');
+  splash.style.background = gameColors[id]+'11';
+  splash.classList.add('active');
+  setTimeout(()=>{
+    document.getElementById('hubScreen').style.display = 'none';
+    const gs = document.getElementById('gameScreen');
+    gs.style.display = 'block';
+    document.getElementById('topbarName').textContent = gameNames[id];
+    document.getElementById('topbarName').style.color = gameColors[id];
+    document.getElementById('topbarName').style.textShadow = `0 0 20px ${gameColors[id]}66`;
+    const frame = document.getElementById('gameFrame');
+    frame.src = gameFiles[id];
+    splash.classList.remove('active');
+  }, 450);
+}
+
+function backToHub(){
+  const splash = document.getElementById('splash');
+  splash.classList.add('active');
+  setTimeout(()=>{
+    document.getElementById('gameScreen').style.display = 'none';
+    document.getElementById('hubScreen').style.display = 'block';
+    document.getElementById('gameFrame').src = '';
+    splash.classList.remove('active');
+  }, 450);
+}
+
+/* ─────────────────────────────
+   CARD CLICK → LAUNCH
+───────────────────────────── */
+document.querySelectorAll('.game-card').forEach(card => {
+  card.addEventListener('click', function(e){
+    if(!e.target.classList.contains('play-btn') && !e.target.closest('.play-btn')){
+      launchGame(this.dataset.game);
+    }
+  });
+});
+
+/* Init previews after fonts/layout */
+window.addEventListener('load', initPreviews);
+</script>
+</body>
+</html>
